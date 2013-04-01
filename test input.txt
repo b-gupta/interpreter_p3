@@ -1,0 +1,37 @@
+(evaluate '(+ (= x 6) (= y (= z 20))) '( (x 2) (y 2) (z 2)))
+
+(evaluate-env '(+ (= x 6) (= y (= z 20))) '( (x 2) (y 2) (z 2)))
+
+(evaluate-env '(+ x y) '( (x 2) (y 2) (z 2) ))
+
+
+
+(check_cond_env '(== (= x 5) 5) '( (x 2) ))
+
+(check_cond_env '(== (+ (= x 6) (= y (= z 20))) 26) '( (x) (y) (z) ))
+
+(lookup '( ( (x 2) (y 3) ) ( (z 5) ) ))
+
+(define vars '(x y t))
+(define vals '(5 10 11))
+(define result '( (z) (8) ))
+
+(lookup_block 'y '((x z y a) (10 3 4 5)))
+(lookup 'd '( ((x z y a) (10 3 4 5)) ( (c d) (-1 -2))))
+(lookup 'z '(((z y x) (0 #f #t))))
+(bind 'd 0 '( ((x z y a) (10 3 4 5)) ( (c d) (-1 -2))))
+
+
+var x = 0;
+var b = 2;
+
+while ( (x = x + 1) < 10 ) {
+
+if ( (x % 2) == 0 )
+ continue;
+
+b = b * 2;
+
+}
+
+return b;
