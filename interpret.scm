@@ -23,7 +23,7 @@
                (interpret_stmt_list
                 (parser file)
                  new_environment
-                 k (lambda (v) v) (lambda (v) v))))))
+                 k (lambda (v) (error "Illegal break")) (lambda (v) (error "Illegal continue")))))))
 
 ;returns the final environment
 (define interpret_stmt_list
@@ -51,9 +51,9 @@
       ((eq? (car stmt) 'begin)
        (interpret_begin (cdr stmt) environment return break continue))
       
-      ((eq? (car stmt) 'continue) (break (continue (remove_block environment))))
+      ((eq? (car stmt) 'continue) (break (continue environment)))
       
-      ((eq? (car stmt) 'break) (break (remove_block environment))) 
+      ((eq? (car stmt) 'break) (break environment)) 
       
       ((eq? (car stmt) 'return) (return (check_val (evaluate (cdr stmt) environment))))
       
@@ -128,7 +128,7 @@
 
 (define interpret_begin
   (lambda (stmt environment return break continue)
-     (remove_block (interpret_stmt_list stmt (add_block environment) return break continue))))
+     (remove_block (interpret_stmt_list stmt (add_block environment) return (lambda (v) (break (remove_block v))) (lambda (v) (continue (remove_block v)))))))
 
 ;takes an expression, evaluates it, and returns the value
 ; no type checking is done
