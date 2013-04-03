@@ -14,7 +14,8 @@
 
 (load "environment.scm")
 
-(load "functionParser.scm")
+;(load "functionParser.scm") can only use this if main function is defined
+(load "loopSimpleParser.scm")
 
 (define interpret
   (lambda (file)
@@ -50,9 +51,9 @@
       ((eq? (car stmt) 'begin)
        (interpret_begin (cdr stmt) environment return break continue))
       
-      ((eq? (car stmt) 'continue) (break (continue environment)))
+      ((eq? (car stmt) 'continue) (break (continue (remove_block environment))))
       
-      ((eq? (car stmt) 'break) (break environment)) 
+      ((eq? (car stmt) 'break) (break (remove_block environment))) 
       
       ((eq? (car stmt) 'return) (return (check_val (evaluate (cdr stmt) environment))))
       
@@ -122,7 +123,7 @@
                                 (cond
                                   ((evaluate condt environment) 
                                    (loop condt body (interpret_stmt body (evaluate-env condt environment) return break (lambda (e) (loop condt body e)))))
-                                  (else environment)))))
+                                  (else (evaluate-env condt environment))))))
                  (loop (car stmt) (getbody stmt) environment))))))
 
 (define interpret_begin
