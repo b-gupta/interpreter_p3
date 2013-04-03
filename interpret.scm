@@ -128,7 +128,7 @@
 
 (define interpret_begin
   (lambda (stmt environment return break continue)
-     (remove_block (interpret_stmt_list stmt (add_block environment) return (lambda (v) (break (remove_block v))) (lambda (v) (continue (remove_block v)))))))
+     (remove_block (interpret_stmt_list stmt (add_block environment) return (lambda (v) (break (remove_block v))) continue))))
 
 ;takes an expression, evaluates it, and returns the value
 ; no type checking is done
