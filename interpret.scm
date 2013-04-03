@@ -148,39 +148,40 @@
       ;variable
       ((and (not (pair? expr)) (not (number? expr))) (lookup expr environment))
       
+      ;ask if need to add error to lambda (v) v here to detect illegal break/continue
       ((eq? '= (car expr))
-       (evaluate (op1 expr) (interpret_stmt expr environment (lambda (v) v) (lambda (v) v) (lambda (v) v))))
+       (evaluate (op1 expr) (interpret_stmt expr (evaluate-env (op1 expr) environment) (lambda (v) v) (lambda (v) v) (lambda (v) v))))
       
       ((eq? '% (car expr))
-       (modulo (evaluate (op1 expr) environment) (evaluate (op2 expr) environment)))
+       (modulo (evaluate (op1 expr) environment) (evaluate (op2 expr) (evaluate-env (op1 expr) environment))))
       
       ((eq? '* (car expr))
-       (* (evaluate (op1 expr) environment) (evaluate (op2 expr)  environment)))
+       (* (evaluate (op1 expr) environment) (evaluate (op2 expr)  (evaluate-env (op1 expr) environment))))
       
       ((eq? '/ (car expr))
-       (/ (evaluate (op1 expr) environment) (evaluate (op2 expr) environment)))
+       (/ (evaluate (op1 expr) environment) (evaluate (op2 expr) (evaluate-env (op1 expr) environment))))
       
       ((eq? '+ (car expr))
-       (+ (evaluate (op1 expr) environment) (evaluate (op2 expr)  environment)))
+       (+ (evaluate (op1 expr) environment) (evaluate (op2 expr)  (evaluate-env (op1 expr) environment))))
       
       ;unary
       ((and (eq? '- (car expr)) (null? (cdr (cdr expr)))) (- 0 (evaluate (op1 expr) environment)))
       
       ((eq? '- (car expr))
-       (- (evaluate (op1 expr) environment) (evaluate (op2 expr) environment)))
+       (- (evaluate (op1 expr) environment) (evaluate (op2 expr) (evaluate-env (op1 expr) environment))))
       
-      ((eq? '== (car expr)) (= (evaluate (op1 expr) environment) (evaluate (op2 expr) environment)))
-      ((eq? '!= (car expr)) (not (= (evaluate (op1 expr) environment) (evaluate (op2 expr) environment))))     
-      ((eq? '> (car expr)) (> (evaluate (op1 expr) environment) (evaluate (op2 expr) environment)))
-      ((eq? '< (car expr)) (< (evaluate (op1 expr) environment) (evaluate (op2 expr) environment)))
-      ((eq? '>= (car expr)) (>= (evaluate (op1 expr) environment) (evaluate (op2 expr) environment)))
-      ((eq? '<= (car expr)) (<= (evaluate (op1 expr) environment) (evaluate (op2 expr) environment)))
+      ((eq? '== (car expr)) (= (evaluate (op1 expr) environment) (evaluate (op2 expr) (evaluate-env (op1 expr) environment))))
+      ((eq? '!= (car expr)) (not (= (evaluate (op1 expr) environment) (evaluate (op2 expr) (evaluate-env (op1 expr) environment)))))     
+      ((eq? '> (car expr)) (> (evaluate (op1 expr) environment) (evaluate (op2 expr) (evaluate-env (op1 expr) environment))))
+      ((eq? '< (car expr)) (< (evaluate (op1 expr) environment) (evaluate (op2 expr) (evaluate-env (op1 expr) environment))))
+      ((eq? '>= (car expr)) (>= (evaluate (op1 expr) environment) (evaluate (op2 expr) (evaluate-env (op1 expr) environment))))
+      ((eq? '<= (car expr)) (<= (evaluate (op1 expr) environment) (evaluate (op2 expr) (evaluate-env (op1 expr) environment))))
       
       ((eq? '&& (car expr))
-       (and (evaluate (op1 expr) environment) (evaluate (op2 expr) environment)))
+       (and (evaluate (op1 expr) environment) (evaluate (op2 expr) (evaluate-env (op1 expr) environment))))
 
       ((eq? '|| (car expr))
-       (or (evaluate (op1 expr) environment) (evaluate (op2 expr) environment)))
+       (or (evaluate (op1 expr) environment) (evaluate (op2 expr) (evaluate-env (op1 expr) environment))))
       
       ((eq? '! (car expr))
        (not (evaluate (op1 expr) environment)))
