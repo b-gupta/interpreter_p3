@@ -12,8 +12,9 @@
 ; Java like language.
 ;***********************
 
-(load "environment.scm")
 
+(define dumb_function '())
+(load "environment.scm")
 ;(load "functionParser.scm") can only use this if main function is defined
 (load "loopSimpleParser.scm")
 
