@@ -13,7 +13,6 @@
 ;***********************
 
 
-(define dumb_function '())
 (load "environment.scm")
 ;(load "functionParser.scm") can only use this if main function is defined
 (load "loopSimpleParser.scm")
@@ -117,6 +116,7 @@
     (car (cdr stmt))))
 
 ; executes a while loop
+; ( (cond) (body) )
 (define interpret_while
   (lambda (stmt environment return)
     (call/cc (lambda (break)
@@ -126,10 +126,24 @@
                                    (loop condt body (interpret_stmt body (evaluate-env condt environment) return break (lambda (e) (loop condt body e)))))
                                   (else (evaluate-env condt environment))))))
                  (loop (car stmt) (getbody stmt) environment))))))
-
+; sets aside a new environment block for a given program block
+; { (body) }
 (define interpret_begin
   (lambda (stmt environment return break continue)
      (remove_block (interpret_stmt_list stmt (add_block environment) return (lambda (v) (break (remove_block v))) continue))))
+
+; essentially does the same thing as interpreter decl
+(define interpret_function_dec
+  (lambda (name params body environment)
+    (bind name (closure params body environment))))
+
+(define closure
+  (lambda (params body environment)
+    (list params body ((lambda (e) (getfuncte e)) environment))))
+(define getfuncte
+  (lambda (environment)
+    ))
+    
 
 ;takes an expression, evaluates it, and returns the value
 ; no type checking is done
