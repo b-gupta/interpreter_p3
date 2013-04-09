@@ -1,5 +1,6 @@
-var x;
-var y;
-var z;
-var w = (x = -100) + (y = z = 20);
-return x - (-w) - y - z;
+var x = 5;
+
+if( (x = x * 2) == x)
+  return true;
+else
+  return false;

@@ -12,11 +12,11 @@
 ; Java like language.
 ;***********************
 
-
 (load "environment.scm")
-;(load "functionParser.scm") can only use this if main function is defined
-(load "loopSimpleParser.scm")
+(load "functionParser.scm")
+;(load "loopSimpleParser.scm")
 
+; now only used to set up the "global environment"
 (define interpret
   (lambda (file)
     (call/cc (lambda (k)
@@ -25,6 +25,16 @@
                  new_environment
                  k (lambda (v) (error "Illegal break")) (lambda (v) (error "Illegal continue")))))))
 
+(define interpret_main
+  (lambda (stmt environment k)
+   ; (call/cc (lambda (k)
+               (interpret_stmt_list
+                stmt
+                environment
+                k 
+                (lambda (v) (error "Illegal break"))
+                (lambda (v) (error "Illegal continue")))))
+              
 ;returns the final environment
 (define interpret_stmt_list
   (lambda (parsetree environment k b c)
@@ -57,6 +67,19 @@
       
       ((eq? (car stmt) 'return) (return (check_val (evaluate (cdr stmt) environment))))
       
+      ((and (eq? (car stmt) 'function) (eq? (car (cdr stmt)) 'main)) 
+       (interpret_main (mainbody stmt) environment return))
+      
+      ;(function name params body)
+      ((eq? (car stmt) 'function)
+       (interpret_function_dec (op1 stmt) (op2 stmt) (op3 stmt) environment))
+      
+      ((eq? (car stmt) 'funcall)
+       ; send it the closure instead of the name to make things easier
+       ; as far as extracting things from the closure itself
+       ; (closure params environment)
+       (interpret_function_call (lookup (car (cdr stmt)) environment) (cdr (cdr stmt)) environment))
+      
       (else environment) ; not sure about here. made sense in my head thats why i put it in
     
       )))
@@ -67,6 +90,10 @@
       ((number? v) v)
       (v 'true)
       (else 'false))))
+
+(define mainbody
+  (lambda (stmt)
+    (car (cdr (cdr (cdr stmt))))))
 
 ;**********************
 ;interpret various statements
@@ -133,17 +160,60 @@
      (remove_block (interpret_stmt_list stmt (add_block environment) return (lambda (v) (break (remove_block v))) continue))))
 
 ; essentially does the same thing as interpreter decl
+; (name params body)
 (define interpret_function_dec
   (lambda (name params body environment)
-    (bind name (closure params body environment))))
+    (bind name (create_closure name params body environment) (add name environment))))
 
-(define closure
-  (lambda (params body environment)
-    (list params body ((lambda (e) (getfuncte e)) environment))))
-(define getfuncte
-  (lambda (environment)
-    ))
-    
+; (params body (lambda (e) (get-function-env e))
+; uses continuations so that recursive functions can be called.
+; access the environment from the closure by calling the stored
+; procedure on the environment so that the function declaration is
+; inside it.
+(define create_closure
+  (lambda (name params body environment)
+    (list params body (lambda (e) (get_funenv name params body e)) environment)))
+
+; allows for the use of recursive functions.
+(define get_funenv
+  (lambda (name params body e)
+    (bind name (create_closure name params body e) (add name e))))
+
+(define interpret_function_call
+  (lambda (closure params environment)
+    (remove_block 
+     (interpret_stmt_list (op1 closure) 
+                          (add_params (car closure) params (add_block (getenv_closure closure)))
+                          (lambda (v) (error "Value cannot be used.")) 
+                          (lambda (v) (error "Illegal break"))
+                          (lambda (v) (error "Illegal continue"))))))
+
+; returns a value
+(define interpret_function_callv
+  (lambda (closure params environment)
+    (call/cc (lambda (k)
+               (interpret_stmt_list
+                (op1 closure)
+                (add_params (car closure) params (add_block (getenv_closure closure)) environment)
+                k
+                (lambda (v) (error "Illegal break"))
+                (lambda (v) (error "Illegal continue")))))))
+
+(define getenv_closure
+  (lambda (closure)
+    ((op2 closure) (op3 closure))))
+
+; takes params and their values and adds them to
+; the environment
+; works
+; old_e corresponds to the environment stored in the closure, active when function was defined
+; curr_e is the environment that was just used and stores the values for the params
+(define add_params
+  (lambda (vars params old_e curr_e)
+    (cond
+      ((null? params) old_e)
+      (else
+       (add_params (cdr vars) (cdr params) (bind (car vars) (evaluate (car params) curr_e) (add (car vars) old_e)) curr_e)))))
 
 ;takes an expression, evaluates it, and returns the value
 ; no type checking is done
@@ -160,8 +230,13 @@
       
       ((eq? expr 'false) #f)
      
-      ;variable
+      ;variable or function. if function then evaluate its value
       ((and (not (pair? expr)) (not (number? expr))) (lookup expr environment))
+      
+      ; we need to perform a function call
+      ; (funcall name p1 p2...pn)
+      ((eq? (car expr) 'funcall) 
+       (interpret_function_callv (lookup (car (cdr expr)) environment) (cdr (cdr expr)) environment))
       
       ;ask if need to add error to lambda (v) v here to detect illegal break/continue
       ((eq? '= (car expr))
@@ -218,6 +293,8 @@
       ; variable
       ((and (not (pair? expr)) (not (number? expr))) environment)
       
+      ; function
+      ((eq? (car expr) 'funcall) environment)
       ; ((number? (car expr)) (car expr))
       ((eq? '= (car expr))
        (evaluate-env (op1 expr) (interpret_stmt expr environment (lambda (v) v) (lambda (v) v) (lambda (v) v))))
@@ -235,6 +312,10 @@
       (else (evaluate-env (car expr) environment))
       )))
 
+; takes a list of expressions and evaluates them returning a list of values.
+(define eval_params
+  (lambda (params environment)
+    (eval_params_h params environment '())))
 
 ;returns the first operand of a given stmt
 ; (+ x y) -> x
@@ -246,6 +327,11 @@
 (define op2
   (lambda (expr)
     (car (cdr (cdr expr)))))
+; returns the third operand of a given stmt
+; (funcall name params body) -> body
+(define op3
+  (lambda (expr)
+    (car (cdr (cdr (cdr expr))))))
       
                      
                      

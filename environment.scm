@@ -23,7 +23,7 @@
   (lambda (var val environment)
     (cond
       ((null? environment) (error 'undefined))
-      ((not (list? (lookup_block var (car environment)))) (cons (bindval var val (envremove var (car environment))) (cdr environment)))
+      ((not (eq? (lookup_block var (car environment)) 'nothere)) (cons (bindval var val (envremove var (car environment))) (cdr environment)))
       (else (cons (car environment) (bind var val (cdr environment)))))))
 
 (define bindval

@@ -15,7 +15,6 @@ gcd(a,b) {
   return b;
 }
 main () {
-
-  return gcd(x,y);
-  
+  var ans = gcd(x,y);
+  return ans;
 }
