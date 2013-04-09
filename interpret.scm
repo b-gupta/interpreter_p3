@@ -183,7 +183,7 @@
   (lambda (closure params environment)
     (remove_block 
      (interpret_stmt_list (op1 closure) 
-                          (add_params (car closure) params (add_block (getenv_closure closure)))
+                          (add_params (car closure) params (add_block (getenv_closure closure)) environment)
                           (lambda (v) (error "Value cannot be used.")) 
                           (lambda (v) (error "Illegal break"))
                           (lambda (v) (error "Illegal continue"))))))
