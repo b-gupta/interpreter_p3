@@ -78,11 +78,30 @@
        ; send it the closure instead of the name to make things easier
        ; as far as extracting things from the closure itself
        ; (closure params environment)
-       (interpret_function_call (lookup (car (cdr stmt)) environment) (cdr (cdr stmt)) environment))
+       (val_or_ref (lookup (car (cdr stmt)) environment) (cdr (cdr stmt)) environment))
       
       (else environment) ; not sure about here. made sense in my head thats why i put it in
     
       )))
+
+(define val_or_ref
+  (lambda (closure params environment)
+    (cond
+      ;closure could be -> ( (& x & y)....) -> call_by_ref
+      ((eq? (car (car closure)) '&) (interpret_function_call_ref
+                                     ; fix the closure params before execution
+                                     (cons (remove& (car closure)) (cdr closure)) 
+                                     params 
+                                     environment))
+      (else (interpret_function_call closure params environment)))))
+
+; '(& x & y) -> '(x y)
+(define remove&
+  (lambda (params)
+    (cond
+      ((null? params) '())
+      ((eq? (car params) '&) (remove& (cdr params)))
+      (else (cons (car params) (remove& (cdr params)))))))
 
 (define check_val
   (lambda (v)
@@ -187,6 +206,35 @@
                           (lambda (v) (error "Value cannot be used.")) 
                           (lambda (v) (error "Illegal break"))
                           (lambda (v) (error "Illegal continue")))) environment)))
+
+(define interpret_function_call_ref
+  (lambda (closure params environment)
+    (call_ref_env (car closure) params 
+                  (interpret_stmt_list (op1 closure) 
+                                       (add_params (car closure) params (add_block (getenv_closure closure)) environment)
+                                       (lambda (v) (error "Value cannot be used.")) 
+                                       (lambda (v) (error "Illegal break"))
+                                       (lambda (v) (error "Illegal continue"))) 
+                  environment)))
+
+(define call_ref_env
+  (lambda (closure_params call_params call_env curr_env)
+    (assign_vals 
+     call_params 
+     (get_paramvals closure_params call_env) 
+     (switch_global (remove_block call_env) curr_env))))
+
+(define get_paramvals
+ (lambda (params env)
+   (cond
+     ((null? params) '())
+     (else (cons (lookup (car params) env) (get_paramvals (cdr params) env))))))
+
+(define assign_vals
+  (lambda (params vals env)
+    (cond
+      ((null? params) env)
+      (else (assign_vals (cdr params) (cdr vals) (bind (car params) (car vals) env))))))
 
 (define switch_global
   (lambda (f_env env)
