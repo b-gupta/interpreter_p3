@@ -1,0 +1,15 @@
+
+swap(x, y) {
+
+  var temp = x;
+  x = y;
+  y = temp;
+  return y;
+}
+ 
+main () {
+  var x = 0;
+  var y = 1;
+  y = swap(x, y);
+  return y;
+}

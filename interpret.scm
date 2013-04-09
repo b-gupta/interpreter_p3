@@ -181,12 +181,16 @@
 
 (define interpret_function_call
   (lambda (closure params environment)
-    (remove_block 
+    (switch_global (remove_block 
      (interpret_stmt_list (op1 closure) 
                           (add_params (car closure) params (add_block (getenv_closure closure)) environment)
                           (lambda (v) (error "Value cannot be used.")) 
                           (lambda (v) (error "Illegal break"))
-                          (lambda (v) (error "Illegal continue"))))))
+                          (lambda (v) (error "Illegal continue")))) environment)))
+
+(define switch_global
+  (lambda (f_env env)
+    (list (car env) (car f_env))))
 
 ; returns a value
 (define interpret_function_callv
