@@ -7,7 +7,7 @@
 (define lookup_block_h
  (lambda (v vars vals)
    (cond
-     ((null? vars) '())
+     ((null? vars) 'nothere)
      ((eq? v (car vars)) (car vals))
      (else (lookup_block_h v (cdr vars) (cdr vals))))))
 
@@ -15,7 +15,7 @@
   (lambda (var state)
     (cond
       ((null? state) (error 'undefined))
-      ((not (list? (lookup_block var (car state)))) (lookup_block var (car state)))
+      ((not (eq? (lookup_block var (car state)) 'nothere)) (lookup_block var (car state)))
       (else (lookup var (cdr state))))))
 
 
