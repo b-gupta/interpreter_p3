@@ -207,6 +207,14 @@
                           (lambda (v) (error "Illegal break"))
                           (lambda (v) (error "Illegal continue")))) environment)))
 
+(define get_ref_vars
+  (lambda (vars)
+    (cond
+      ((null? vars) '())
+      ; should technically check to make sure something comes after the &
+      ((eq? (car vars) '&) (cons (cadr vars) (get_ref_vars (cdr (cdr vars)))))
+      (else (cons 'valonly (get_ref_vars (cdr vars)))))))
+
 (define interpret_function_call_ref
   (lambda (closure params environment)
     (call_ref_env (car closure) params 
