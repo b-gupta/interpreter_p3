@@ -1,0 +1,13 @@
+var x = 100;
+var y = -100;
+
+foo (z) {
+
+  x = x - z;
+  y = y + z;
+}
+main () {
+  
+  foo(50);
+  return y;
+}

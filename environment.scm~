@@ -74,7 +74,7 @@
 (define find_func_container
   (lambda (name e)
     (cond
-      ((null? e) '())
+      ((null? e) 'dne)
       ((not (eq? (lookup_block name (car e)))) (car e))
       (else (find_func_container name (cdr e))))))
 

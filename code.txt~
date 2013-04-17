@@ -1,0 +1,6 @@
+var x = 5;
+
+if( (x = x +1) == x)
+  return true;
+else
+  return false;

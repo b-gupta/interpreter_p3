@@ -13,8 +13,9 @@
 ;***********************
 
 (load "environment.scm")
-(load "functionParser.scm")
 ;(load "loopSimpleParser.scm")
+(load "functionParser.scm")
+;(load "classParser.scm")
 
 ; now only used to set up the "global environment"
 (define interpret
@@ -93,6 +94,7 @@
 
 ;**********************
 ;interpret various statements
+;----------------------
 
 ;binds a value to a variable
 ;(x expr)
@@ -149,6 +151,7 @@
                                    (loop condt body (interpret_stmt body (evaluate-env condt environment) return break (lambda (e) (loop condt body e)))))
                                   (else (evaluate-env condt environment))))))
                  (loop (car stmt) (getbody stmt) environment))))))
+
 ; sets aside a new environment block for a given program block
 ; { (body) }
 (define interpret_begin
@@ -197,6 +200,18 @@
                 (lambda (v) (error "Illegal break"))
                 (lambda (v) (error "Illegal continue")))))))
 
+; takes params and their values and adds them to
+; the environment
+; works
+; old_e corresponds to the environment stored in the closure, active when function was defined
+; curr_e is the environment that was just used and stores the values for the params
+(define add_params
+  (lambda (vars params old_e curr_e)
+    (cond
+      ((null? params) old_e)
+      (else
+       (add_params (cdr vars) (cdr params) (bind (car vars) (evaluate (car params) curr_e) (add (car vars) old_e)) curr_e)))))
+
 ; (& x y)
 (define call_ref_env
   (lambda (closure_params call_params call_env curr_env)
@@ -212,6 +227,8 @@
      ((null? params) '())
      (else (cons (lookup (car params) env) (get_paramvals (cdr params) env))))))
 
+; for the purposes of call by reference this will assign a list of vars
+; in the current environment values resulting from the functional call
 (define assign_vals
   (lambda (params check_params vals env)
     (cond
@@ -219,6 +236,7 @@
       ((eq? (car check_params) 'valonly) (assign_vals (cdr params) (cdr check_params) (cdr vals) env))
       (else (assign_vals (cdr params) (cdr check_params) (cdr vals) (bind (car params) (car vals) env))))))
 
+;  
 (define switch_global
   (lambda (f_env env)
     (list (car env) (car f_env))))
@@ -246,18 +264,6 @@
 (define getenv_closure
   (lambda (closure)
     ((op2 closure) (op3 closure))))
-
-; takes params and their values and adds them to
-; the environment
-; works
-; old_e corresponds to the environment stored in the closure, active when function was defined
-; curr_e is the environment that was just used and stores the values for the params
-(define add_params
-  (lambda (vars params old_e curr_e)
-    (cond
-      ((null? params) old_e)
-      (else
-       (add_params (cdr vars) (cdr params) (bind (car vars) (evaluate (car params) curr_e) (add (car vars) old_e)) curr_e)))))
 
 ;takes an expression, evaluates it, and returns the value
 ; no type checking is done
@@ -375,9 +381,7 @@
 ; (funcall name params body) -> body
 (define op3
   (lambda (expr)
-    (car (cdr (cdr (cdr expr))))))
-      
-                     
+    (car (cdr (cdr (cdr expr))))))          
                      
                      
                      
