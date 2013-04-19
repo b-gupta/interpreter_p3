@@ -19,6 +19,7 @@ class Square extends Rectangle {
   }
 
   static main() {
+    setSize(20);
     return area();
   }
 }

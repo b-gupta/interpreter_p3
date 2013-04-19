@@ -5,7 +5,7 @@
 ; BXG135 ***************
 ; Robert Luciano *******
 ; RDL40 ****************
-; 4/2/13 **************
+; 4/17/13 **************
 ; **********************
 ; Project Part 3
 ; Interpreter for C or 
@@ -14,11 +14,11 @@
 
 (load "environment.scm")
 ;(load "loopSimpleParser.scm")
-(load "functionParser.scm")
-;(load "classParser.scm")
+;(load "functionParser.scm")
+(load "classParser.scm")
 
 ; now only used to set up the "global environment"
-(define interpret
+(define interpret_orig
   (lambda (file)
     (call/cc (lambda (k)
                (interpret_stmt_list
@@ -26,15 +26,35 @@
                  new_environment
                  k (lambda (v) (error "Illegal break")) (lambda (v) (error "Illegal continue")))))))
 
+(define interpret
+  (lambda (file classname)
+    (interpret_class_list (parser file) (string->symbol classname) new_environment)))
+
+(define interpret_class_list
+  (lambda (parsetree main_class env)
+    (cond
+      ((null? parsetree) env)
+      ((eq? main_class (get_cname (car parsetree)))
+       (find_class_main (lookup main_class (interpret_class_def (car parsetree) env))))
+      (else (interpret_class_list (cdr parsetree) main_class (interpret_class_def (car parsetree) env))))))
+                                            
+(define get_cname
+  (lambda (class_def)
+    (car (cdr class_def))))
+
+(define find_class_main
+  (lambda (env)
+     (interpret_main (car (cdr (lookup 'main env))) (add_block env))))
+
 (define interpret_main
-  (lambda (stmt environment k)
-   ; (call/cc (lambda (k)
+  (lambda (stmt environment)
+   (call/cc (lambda (k)
                (interpret_stmt_list
                 stmt
                 environment
                 k 
                 (lambda (v) (error "Illegal break"))
-                (lambda (v) (error "Illegal continue")))))
+                (lambda (v) (error "Illegal continue")))))))
               
 ;returns the final environment
 (define interpret_stmt_list
@@ -64,19 +84,26 @@
       
       ((eq? (car stmt) 'continue) (break (continue environment)))
       
-      ((eq? (car stmt) 'break) (break environment)) 
+      ((eq? (car stmt) 'break) (break environment))
+      
+      ((and (eq? (car stmt) 'return) (eq? break 'fenv)) (return environment))
       
       ((eq? (car stmt) 'return) (return (check_val (evaluate (cdr stmt) environment))))
       
       ((and (eq? (car stmt) 'function) (eq? (car (cdr stmt)) 'main)) 
-       (interpret_main (mainbody stmt) environment return))
+       (interpret_main (mainbody stmt) (add_block environment)))
       
       ;(function name params body)
       ((eq? (car stmt) 'function)
        (interpret_function_dec (op1 stmt) (op2 stmt) (op3 stmt) environment))
       
       ((eq? (car stmt) 'funcall)
-       (interpret_function_call (lookup (car (cdr stmt)) environment) (cdr (cdr stmt)) environment))
+       (cond
+         ((list? (car (cdr stmt))) ; eventually consider adding dot to evaluate because it will be associated with vars
+          (interpret_function_call (lookup (op2 (car (cdr stmt))) (remove_block (remove_block environment))) 
+                                                           (cdr (cdr stmt)) 
+                                                           (cons (car environment) (remove_block (remove_block environment)))))
+         (else (interpret_function_call (lookup (car (cdr stmt)) environment) (cdr (cdr stmt)) environment))))
       (else environment) ; not sure about here. made sense in my head thats why i put it in
     
       )))
@@ -87,6 +114,10 @@
       ((number? v) v)
       (v 'true)
       (else 'false))))
+
+;gets the name of a function outof a dot 
+; (dot var fname)
+(define get_dfunc '())
 
 (define mainbody
   (lambda (stmt)
@@ -183,11 +214,19 @@
   (lambda (closure params environment)
     (call_ref_env (car closure) params 
                   (interpret_stmt_list (op1 closure) 
-                                       (add_params (remove& (car closure)) params (add_block (getenv_closure closure)) environment)
-                                       (lambda (v) (error "Value cannot be used.")) 
-                                       (lambda (v) (error "Illegal break"))
+                                       (add_params (remove& (car closure)) params (add_block (remove_block (fix_fenv (car closure) (car (car environment)) environment))) environment)
+                                       (lambda (v) v) 
+                                       'fenv ; in order to indicate that if we see a return we want to simply return the environment this time
                                        (lambda (v) (error "Illegal continue"))) 
                   environment)))
+
+; '( ( () () ) )
+(define fix_fenv
+  (lambda (fname vars environment)
+    (cond
+      ((null? vars) environment)
+      ((eq? (car vars) fname) environment)
+      (else (fix_fenv fname (cdr vars) (cons (envremove (car vars) (car environment)) (cdr environment)))))))
 
 ; returns the value that results from a function call
 (define interpret_function_callv
@@ -195,7 +234,7 @@
     (call/cc (lambda (k)
                (interpret_stmt_list
                 (op1 closure)
-                (add_params (car closure) params (add_block (getenv_closure closure)) environment)
+                (add_params (car closure) params (add_block (remove_block environment)) environment)
                 k
                 (lambda (v) (error "Illegal break"))
                 (lambda (v) (error "Illegal continue")))))))
@@ -209,8 +248,15 @@
   (lambda (vars params old_e curr_e)
     (cond
       ((null? params) old_e)
+      ;((null? vars) old_e)
       (else
        (add_params (cdr vars) (cdr params) (bind (car vars) (evaluate (car params) curr_e) (add (car vars) old_e)) curr_e)))))
+
+(define func_se
+  (lambda (params env)
+    (cond
+      ((null? params) env)
+      (else (func_se (cdr params) (evaluate-env (car params) env))))))
 
 ; (& x y)
 (define call_ref_env
@@ -265,6 +311,45 @@
   (lambda (closure)
     ((op2 closure) (op3 closure))))
 
+(define interpret_class_def
+  (lambda (class env)
+    (interpret_class (get_cname class) (get_cparent class) (get_cparams class) env)))
+
+;takes a class definition and pops out the parent classes name
+(define get_cparent
+  (lambda (class)
+    (cond
+      ((null? (car (cdr (cdr class)))) '())
+      (else (car (cdr (car (cdr (cdr class)))))))))
+
+;takes a class definition and pops out the class params (includes funcs)
+(define get_cparams
+  (lambda (class)
+    (car (cdr (cdr (cdr class))))))
+
+(define interpret_class
+ (lambda (name parent params environment)
+   (bind name (create_class_env params (get_penv parent environment)) (add name environment))))
+
+; if a class has a parent this will return that parents environment
+; otherwise it will simply return an empty environment
+(define get_penv
+  (lambda (parent env)
+    (cond
+      ((null? parent) new_environment)
+      (else (add_block (lookup parent env))))))
+
+; takes the contents of a class and generates a closure
+; for that class essentially
+(define create_class_env
+  (lambda (params env)
+    (cond
+      ((null? params) env)
+      ((eq? (car (car params)) 'static-var) 
+       (create_class_env (cdr params) (interpret_dec (cdr (car params)) env)))
+      ((eq? (car (car params)) 'static-function) 
+       (create_class_env (cdr params) (interpret_function_dec (op1 (car params)) (op2 (car params)) (op3 (car params)) env)))
+      (else (create_class_env (cdr params) env)))))
 ;takes an expression, evaluates it, and returns the value
 ; no type checking is done
 ; (+ 5 3) -> 8
@@ -344,7 +429,7 @@
       ((and (not (pair? expr)) (not (number? expr))) environment)
       
       ; function
-      ((eq? (car expr) 'funcall) environment)
+      ((eq? (car expr) 'funcall) (interpret_function_call (lookup (car (cdr expr)) environment) (cdr (cdr expr)) environment))
       ; ((number? (car expr)) (car expr))
       ((eq? '= (car expr))
        (evaluate-env (op1 expr) (interpret_stmt expr environment (lambda (v) v) (lambda (v) v) (lambda (v) v))))
