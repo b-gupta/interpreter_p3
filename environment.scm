@@ -71,12 +71,20 @@
 
 ; searches the environment to find the layer that contains a particular
 ; function and returns it
-(define find_func_container
+(define get_func_env
   (lambda (name e)
     (cond
-      ((null? e) '())
-      ((not (eq? (lookup_block name (car e)))) (car e))
-      (else (find_func_container name (cdr e))))))
+      ((null? e) (error "function not present in environment"))
+      ((not (eq? (lookup_block name (car e)) 'nothere)) e);(cons (remove_new_vars name (car e)) (cdr e)))
+      (else (get_func_env name (cdr e))))))
+
+; removes vars defined after a function with given name was created
+(define remove_new_vars
+  (lambda (name block)
+    (cond
+      ((null? block) (error "problem with func environment"))
+      ((eq? name (car (car block))) block)
+      (else (remove_new_vars name (envremove (car (car block)) block))))))
 
 ; creates an empty environment
 (define new_environment '( ( () () ) ) )

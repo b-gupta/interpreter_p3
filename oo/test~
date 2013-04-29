@@ -15,11 +15,16 @@ class Rectangle {
 
 class Square extends Rectangle {
   static setSize(x) {
-    super.setSize(x, x);
+    var x = 1;
+    while (x > 0) {
+      super.setSize(x, x);
+      x = x - 1;
+    }
   }
 
   static main() {
     setSize(20);
-    return area();
+    var x = 2;
+    return 2 * area();
   }
 }
