@@ -14,8 +14,8 @@
 
 (load "environment.scm")
 ;(load "loopSimpleParser.scm")
-;(load "functionParser.scm")
-(load "classParser.scm")
+(load "functionParser.scm")
+;(load "classParser.scm")
 
 ; now only used to set up the "global environment"
 (define interpret_orig
@@ -33,9 +33,9 @@
 (define interpret_class_list
   (lambda (parsetree main_class env)
     (cond
-      ((null? parsetree) env)
-      ((eq? main_class (get_cname (car parsetree)))
-       (find_class_main (lookup main_class (interpret_class_def (car parsetree) env))))
+      ((null? parsetree) (find_class_main (lookup main_class env)))
+      ;((eq? main_class (get_cname (car parsetree)))
+       ;(find_class_main (lookup main_class (interpret_class_def (car parsetree) env))))
       (else (interpret_class_list (cdr parsetree) main_class (interpret_class_def (car parsetree) env))))))
                                             
 (define get_cname
@@ -202,10 +202,17 @@
 ; inside it.
 (define create_closure
   (lambda (name params body environment)
-    (list params body (lambda (e) (get_funenv name params body e)) environment)))
+   ;; (list params body (lambda (e) (setup_funenv name params body e)) environment)))
+    (list params body name environment)))
 
+; applies the get_func_env function to the op2 of the closure (which is the name)
+(define get_env_closure
+  (lambda (closure env)
+    (get_func_env (op2 closure) env)))
+
+; deprecated
 ; allows for the use of recursive functions.
-(define get_funenv
+(define setup_funenv
   (lambda (name params body e)
     (bind name (create_closure name params body e) (add name e))))
 
@@ -214,7 +221,8 @@
   (lambda (closure params environment)
     (call_ref_env (car closure) params 
                   (interpret_stmt_list (op1 closure) 
-                                       (add_params (remove& (car closure)) params (add_block (remove_block (fix_fenv (car closure) (car (car environment)) environment))) environment)
+                                       ;(add_params (remove& (car closure)) params (add_block (remove_block (fix_fenv (car closure) (car (car environment)) environment))) environment)
+                                       (create_func_env closure params environment)
                                        (lambda (v) v) 
                                        'fenv ; in order to indicate that if we see a return we want to simply return the environment this time
                                        (lambda (v) (error "Illegal continue"))) 
@@ -234,24 +242,30 @@
     (call/cc (lambda (k)
                (interpret_stmt_list
                 (op1 closure)
-                (add_params (car closure) params (add_block (remove_block environment)) environment)
+                ;(add_params (car closure) params (add_block (remove_block environment)) environment)
+                (create_func_env closure params environment)
                 k
                 (lambda (v) (error "Illegal break"))
                 (lambda (v) (error "Illegal continue")))))))
 
+(define create_func_env
+  (lambda (closure params env)
+    (add_params (remove& (car closure)) params (add_block (get_env_closure closure env)) env)))
+
 ; takes params and their values and adds them to
 ; the environment
 ; works
-; old_e corresponds to the environment stored in the closure, active when function was defined
+; func_e corresponds to the environment when the function was defined
 ; curr_e is the environment that was just used and stores the values for the params
 (define add_params
-  (lambda (vars params old_e curr_e)
+  (lambda (vars params func_e curr_e)
     (cond
-      ((null? params) old_e)
+      ((null? params) func_e)
       ;((null? vars) old_e)
       (else
-       (add_params (cdr vars) (cdr params) (bind (car vars) (evaluate (car params) curr_e) (add (car vars) old_e)) curr_e)))))
+       (add_params (cdr vars) (cdr params) (bind (car vars) (evaluate (car params) curr_e) (add (car vars) func_e)) curr_e)))))
 
+; in order to implement function side effects
 (define func_se
   (lambda (params env)
     (cond
@@ -285,7 +299,10 @@
 ;  
 (define switch_global
   (lambda (f_env env)
-    (list (car env) (car f_env))))
+    ;(list (car env) (car f_env))))
+    (cond
+      ((null? (cdr env)) (car f_env))
+      (else (list (car env) (switch_global f_env (remove_block env)))))))
 
 ; '(& x & y) -> '(x y)
 (define remove&
@@ -304,12 +321,6 @@
       ; should technically check to make sure something comes after the &
       ((eq? (car vars) '&) (cons (cadr vars) (get_ref_vars (cdr (cdr vars)))))
       (else (cons 'valonly (get_ref_vars (cdr vars)))))))
-
-; applies the function stored in the op2 of the closure to the 
-; environment stored in the op3 of closure
-(define getenv_closure
-  (lambda (closure)
-    ((op2 closure) (op3 closure))))
 
 (define interpret_class_def
   (lambda (class env)
