@@ -5,19 +5,19 @@
 ; BXG135 ***************
 ; Robert Luciano *******
 ; RDL40 ****************
-; 4/17/13 **************
+; 4/29/13 **************
 ; **********************
-; Project Part 3
+; Project Part 5
 ; Interpreter for C or 
 ; Java like language.
 ;***********************
 
 (load "environment.scm")
 ;(load "loopSimpleParser.scm")
-(load "functionParser.scm")
-;(load "classParser.scm")
+;(load "functionParser.scm")
+(load "classParser.scm")
 
-; now only used to set up the "global environment"
+; this the interpret method used for parts 1-3
 (define interpret_orig
   (lambda (file)
     (call/cc (lambda (k)
@@ -26,10 +26,13 @@
                  new_environment
                  k (lambda (v) (error "Illegal break")) (lambda (v) (error "Illegal continue")))))))
 
+; this interpret will be used for parts 4 and 5 where classes are used.
+; it requires both the file name and class name.
 (define interpret
   (lambda (file classname)
     (interpret_class_list (parser file) (string->symbol classname) new_environment)))
 
+; setting up the global class environment accesible to anything
 (define interpret_class_list
   (lambda (parsetree main_class env)
     (cond
@@ -328,6 +331,32 @@
   (lambda (class env)
     (interpret_class (get_cname class) (get_cparent class) (get_cparams class) env)))
 
+; takes the classes paramaters (methods and functions) and uses them to find all the instance variables/methods
+(define create_instance_env
+  (lambda (parent params env class_env)
+    (cond
+      ((and (null? params) (null? parent)) env)
+      ((null? params) 
+       (cons env (create_instance_env_helper parent (get_instance_params (lookup (car parent) class_env)) class_env)))
+      ((eq? (caar params) 'var)
+       (create_instance_env parent (cdr params) (interpret_dec (cdar params) env) class_env))
+      ((eq? (caar params) 'function)
+       (create_instance_env parent (cdr params) (interpret_function_dec (op1 (car params)) (op2 (car params)) (op3 (car params)) env) class_env))
+      (else (create_instance_env parent (cdr params) env class_env)))))
+
+; takes the contents of a class and generates a closure
+; for that class essentially
+; only static vars/methods are placed here
+(define create_class_env
+  (lambda (params env)
+    (cond
+      ((null? params) env)
+      ((eq? (car (car params)) 'static-var) 
+       (create_class_env (cdr params) (interpret_dec (cdr (car params)) env)))
+      ((eq? (car (car params)) 'static-function) 
+       (create_class_env (cdr params) (interpret_function_dec (op1 (car params)) (op2 (car params)) (op3 (car params)) env)))
+      (else (create_class_env (cdr params) env)))))
+
 ;takes a class definition and pops out the parent classes name
 (define get_cparent
   (lambda (class)
@@ -352,17 +381,6 @@
       ((null? parent) new_environment)
       (else (add_block (lookup parent env))))))
 
-; takes the contents of a class and generates a closure
-; for that class essentially
-(define create_class_env
-  (lambda (params env)
-    (cond
-      ((null? params) env)
-      ((eq? (car (car params)) 'static-var) 
-       (create_class_env (cdr params) (interpret_dec (cdr (car params)) env)))
-      ((eq? (car (car params)) 'static-function) 
-       (create_class_env (cdr params) (interpret_function_dec (op1 (car params)) (op2 (car params)) (op3 (car params)) env)))
-      (else (create_class_env (cdr params) env)))))
 
 ;takes an expression, evaluates it, and returns the value
 ; no type checking is done
