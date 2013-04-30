@@ -18,6 +18,15 @@
       ((not (eq? (lookup_block var (car state)) 'nothere)) (lookup_block var (car state)))
       (else (lookup var (cdr state))))))
 
+;for use in the circumstance when there is a return stmt
+;but you want the environment when calling a function.
+(define lookup_ret
+  (lambda (var state)
+    (cond
+      ((null? state) 'nothere)
+      ((not (eq? (lookup_block var (car state)) 'nothere)) (lookup_block var (car state)))
+      (else (lookup_ret var (cdr state))))))
+
 
 (define bind
   (lambda (var val environment)
@@ -39,6 +48,7 @@
 (define envremove_h
   (lambda (v vars vals result)
     (cond
+      ((null? vars) result)
       ((eq? v (car vars)) (list (append (cdr vars) (car result)) (append (cdr vals) (car (cdr result)))))
       (else (envremove_h v (cdr vars) (cdr vals) 
                          (list (cons (car vars) (car result)) (cons (car vals) (car (cdr result)))) ;build the resulting block

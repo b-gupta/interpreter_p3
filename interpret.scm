@@ -86,7 +86,7 @@
       
       ((eq? (car stmt) 'break) (break environment))
       
-      ((and (eq? (car stmt) 'return) (eq? break 'fenv)) (return environment))
+      ((and (eq? (car stmt) 'return) (not (eq? (lookup_ret 'return_env environment) 'nothere))) (return (evaluate-env (cdr stmt) environment)))
       
       ((eq? (car stmt) 'return) (return (check_val (evaluate (cdr stmt) environment))))
       
@@ -220,21 +220,15 @@
 (define interpret_function_call
   (lambda (closure params environment)
     (call_ref_env (car closure) params 
+                  (call/cc (lambda (k)
                   (interpret_stmt_list (op1 closure) 
                                        ;(add_params (remove& (car closure)) params (add_block (remove_block (fix_fenv (car closure) (car (car environment)) environment))) environment)
-                                       (create_func_env closure params environment)
-                                       (lambda (v) v) 
-                                       'fenv ; in order to indicate that if we see a return we want to simply return the environment this time
-                                       (lambda (v) (error "Illegal continue"))) 
+                                       ; add return_env to env so that if we see a return statement we return environment instead of value
+                                       (add 'return_env (create_func_env closure params environment))
+                                       k
+                                       (lambda (v) (error "Illegal break"))
+                                       (lambda (v) (error "Illegal continue"))))) 
                   environment)))
-
-; '( ( () () ) )
-(define fix_fenv
-  (lambda (fname vars environment)
-    (cond
-      ((null? vars) environment)
-      ((eq? (car vars) fname) environment)
-      (else (fix_fenv fname (cdr vars) (cons (envremove (car vars) (car environment)) (cdr environment)))))))
 
 ; returns the value that results from a function call
 (define interpret_function_callv
@@ -279,7 +273,7 @@
      call_params
      (get_ref_vars closure_params)
      (get_paramvals (remove& closure_params) call_env) 
-     (switch_global (remove_block call_env) curr_env))))
+     (switch_global (get_global call_env) curr_env))))
 
 (define get_paramvals
  (lambda (params env)
@@ -301,8 +295,16 @@
   (lambda (f_env env)
     ;(list (car env) (car f_env))))
     (cond
-      ((null? (cdr env)) (car f_env))
-      (else (list (car env) (switch_global f_env (remove_block env)))))))
+      ((null? (cdr env)) (list (envremove 'return_env (car f_env))))
+      (else (cons (car env) (switch_global f_env (remove_block env)))))))
+
+; takes the function environment and removes all but the global layer
+; which is the very end
+(define get_global
+  (lambda (fenv)
+    (cond
+      ((null? (remove_block fenv)) fenv)
+      (else (get_global (remove_block fenv))))))
 
 ; '(& x & y) -> '(x y)
 (define remove&
@@ -361,6 +363,7 @@
       ((eq? (car (car params)) 'static-function) 
        (create_class_env (cdr params) (interpret_function_dec (op1 (car params)) (op2 (car params)) (op3 (car params)) env)))
       (else (create_class_env (cdr params) env)))))
+
 ;takes an expression, evaluates it, and returns the value
 ; no type checking is done
 ; (+ 5 3) -> 8
@@ -477,7 +480,7 @@
 ; (funcall name params body) -> body
 (define op3
   (lambda (expr)
-    (car (cdr (cdr (cdr expr))))))          
+    (car (cdr (cdr (cdr expr))))))    
                      
                      
                      
