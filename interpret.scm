@@ -14,8 +14,8 @@
 
 (load "environment.scm")
 ;(load "loopSimpleParser.scm")
-;(load "functionParser.scm")
-(load "classParser.scm")
+(load "functionParser.scm")
+;(load "classParser.scm")
 
 ; this the interpret method used for parts 1-3
 (define interpret_orig
@@ -123,7 +123,7 @@
          ; (interpret_function_call (lookup (op2 (car (cdr stmt))) (remove_block (remove_block environment))) 
          ;                                                  (cdr (cdr stmt)) 
          ;                                                  (cons (car environment) (remove_block (remove_block environment)))))
-         (else (interpret_function_call (lookup (cadr stmt) environment) (cddr stmt) environment))))
+         (else (interpret_function_call (lookup (cadr stmt) environment) (cddr stmt) environment #f))))
       (else environment) ; not sure about here. made sense in my head thats why i put it in
     
       ))))
@@ -238,32 +238,23 @@
     (bind name (create_closure name params body e) (add name e))))
 
 ; handles call by value and call by reference
+; if bool_val is true then it will try to return a value else environment
 (define interpret_function_call
-  (lambda (closure params environment)
+  (lambda (closure params environment bool_val)
     (call_ref_env (car closure) params 
                   (call/cc (lambda (k)
-                  (interpret_stmt_list (op1 closure) 
-                                       ;(add_params (remove& (car closure)) params (add_block (remove_block (fix_fenv (car closure) (car (car environment)) environment))) environment)
-                                       ; add return_env to env so that if we see a return statement we return environment instead of value
-                                       (add 'return_env (create_func_env closure params environment))
-                                       k
-                                       (lambda (v) (error "Illegal break"))
-                                       (lambda (v) (error "Illegal continue"))))) 
+                             (interpret_stmt_list (op1 closure) 
+                                                  ;(add_params (remove& (car closure)) params (add_block (remove_block (fix_fenv (car closure) (car (car environment)) environment))) environment)
+                                                  ; add return_env to env so that if we see a return statement we return environment instead of value
+                                                  (cond
+                                                    (bool_val (create_func_env closure params environment))
+                                                    (else (add 'return_env (create_func_env closure params environment)))
+                                                    )
+                                                  k
+                                                  (lambda (v) (error "Illegal break"))
+                                                  (lambda (v) (error "Illegal continue"))))) 
                   environment)))
 
-; returns the value that results from a function call
-(define interpret_function_callv
-  (lambda (closure params environment)
-    (call/cc (lambda (k)
-               (interpret_stmt_list
-                (op1 closure)
-                ;(add_params (car closure) params (add_block (remove_block environment)) environment)
-                (create_func_env closure params environment)
-                k
-                (lambda (v) (error "Illegal break"))
-                (lambda (v) (error "Illegal continue")))))))
-
-;
 ;(dot class/object fname) (p1 p2 .. pn) (env)
 (define interpret_dot_call
   (lambda (dot params env)
@@ -277,7 +268,7 @@
 (define static_method_call
   (lambda (fname params box_env)
     (begin (display (unbox box_env)) (newline)
-    (set-box! box_env (interpret_function_call (lookup fname (unbox box_env)) params (unbox box_env))))))
+    (set-box! box_env (interpret_function_call (lookup fname (unbox box_env)) params (unbox box_env) #f)))))
 
 (define static_method_callv '())
 
@@ -309,11 +300,14 @@
 ; (& x y)
 (define call_ref_env
   (lambda (closure_params call_params call_env curr_env)
-    (assign_vals 
-     call_params
-     (get_ref_vars closure_params)
-     (get_paramvals (remove& closure_params) call_env) 
-     (switch_global (get_global call_env) curr_env))))
+    (cond
+      ((list? call_env)
+       (assign_vals 
+        call_params
+        (get_ref_vars closure_params)
+        (get_paramvals (remove& closure_params) call_env) 
+        (switch_global (get_global call_env) curr_env)))
+      (else call_env))))
 
 (define get_paramvals
  (lambda (params env)
@@ -472,12 +466,12 @@
           (method_call (op2 (cadr expr)) (cddr expr) (lookup (op2 (cadr expr)) (lookup (op1 (cadr expr)) environment)) class_env))
          ;static method
          ;(fname params box_env)
-          (else (static_method_callv 
+          (else (static_method_call))))
       
       ; (funcall name p1 p2...pn)
       ((eq? (car expr) 'funcall) 
-       (interpret_function_callv (lookup (car (cdr expr)) environment) (cdr (cdr expr)) environment))
-      
+       ;(interpret_function_callv (lookup (car (cdr expr)) environment) (cdr (cdr expr)) environment))
+      (interpret_function_call (lookup (car (cdr expr)) environment) (cdr (cdr expr)) environment #t))
       ; class.field --> (dot class field)
       ; object.field --> (dot object field)
       ((eq? (car expr) 'dot)
@@ -544,7 +538,7 @@
       ((and (not (pair? expr)) (not (number? expr))) environment)
       
       ; function
-      ((eq? (car expr) 'funcall) (interpret_function_call (lookup (car (cdr expr)) environment) (cdr (cdr expr)) environment))
+      ((eq? (car expr) 'funcall) (interpret_function_call (lookup (car (cdr expr)) environment) (cdr (cdr expr)) environment #f))
       ; ((number? (car expr)) (car expr))
       ((eq? '= (car expr))
        (evaluate-env (op1 expr) (interpret_stmt expr environment (lambda (v) v) (lambda (v) v) (lambda (v) v))))
