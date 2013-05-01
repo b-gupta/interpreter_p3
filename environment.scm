@@ -20,12 +20,12 @@
 
 ;for use in the circumstance when there is a return stmt
 ;but you want the environment when calling a function.
-(define lookup_ret
+(define lookup_noerr
   (lambda (var state)
     (cond
       ((null? state) 'nothere)
       ((not (eq? (lookup_block var (car state)) 'nothere)) (lookup_block var (car state)))
-      (else (lookup_ret var (cdr state))))))
+      (else (lookup_noerr var (cdr state))))))
 
 
 (define bind

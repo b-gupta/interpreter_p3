@@ -36,16 +36,15 @@
 (define interpret_class_list
   (lambda (parsetree main_class env)
     (cond
-      ((null? parsetree) (find_class_main (lookup main_class env)))
-      ;((eq? main_class (get_cname (car parsetree)))
-       ;(find_class_main (lookup main_class (interpret_class_def (car parsetree) env))))
+      ((null? parsetree) ;(find_class_main (lookup main_class env)))
+      (execute_main (bind 'class env (add 'class (lookup 'static (lookup main_class env))))))
       (else (interpret_class_list (cdr parsetree) main_class (interpret_class_def (car parsetree) env))))))
                                             
 (define get_cname
   (lambda (class_def)
     (car (cdr class_def))))
 
-(define find_class_main
+(define execute_main
   (lambda (env)
      (interpret_main (car (cdr (lookup 'main env))) (add_block env))))
 
@@ -89,7 +88,7 @@
       
       ((eq? (car stmt) 'break) (break environment))
       
-      ((and (eq? (car stmt) 'return) (not (eq? (lookup_ret 'return_env environment) 'nothere))) (return (evaluate-env (cdr stmt) environment)))
+      ((and (eq? (car stmt) 'return) (not (eq? (lookup_noerr 'return_env environment) 'nothere))) (return (evaluate-env (cdr stmt) environment)))
       
       ((eq? (car stmt) 'return) (return (check_val (evaluate (cdr stmt) environment))))
       
@@ -331,6 +330,34 @@
   (lambda (class env)
     (interpret_class (get_cname class) (get_cparent class) (get_cparams class) env)))
 
+(define interpret_class
+ (lambda (name parent params env)
+   (bind name (create_class_closure parent params new_environment) (add name env))))
+   ;(bind name (create_class_env params (get_penv parent environment)) (add name environment))))
+
+; a class closure is an environment containing 3 vars:
+; 1. parent -> name of the parent
+; 2. static -> the static pre built environment for static functions and vars
+; 3. instance -> list of all the var and method declarations inside the class (non static)
+(define create_class_closure
+  (lambda (parent params new_env)
+   (bind 'static (create_static_env params new_environment) (add 'static 
+     (bind 'instance (remove_static params) (add 'instance
+       (bind 'parent parent (add 'parent new_env))))))))
+
+; takes the contents of a class and generates a closure
+; for that class essentially
+; only static vars/methods are placed here
+(define create_static_env
+  (lambda (params env)
+    (cond
+      ((null? params) env)
+      ((eq? (caar params) 'static-var) 
+       (create_static_env (cdr params) (interpret_dec (cdr (car params)) env)))
+      ((eq? (caar params) 'static-function)
+       (create_static_env (cdr params) (interpret_function_dec (op1 (car params)) (op2 (car params)) (op3 (car params)) env)))
+      (else (create_static_env (cdr params) env)))))
+
 ; takes the classes paramaters (methods and functions) and uses them to find all the instance variables/methods
 (define create_instance_env
   (lambda (parent params env class_env)
@@ -344,18 +371,15 @@
        (create_instance_env parent (cdr params) (interpret_function_dec (op1 (car params)) (op2 (car params)) (op3 (car params)) env) class_env))
       (else (create_instance_env parent (cdr params) env class_env)))))
 
-; takes the contents of a class and generates a closure
-; for that class essentially
-; only static vars/methods are placed here
-(define create_class_env
-  (lambda (params env)
+
+;takes class paramaters and removes all that are static
+(define remove_static
+  (lambda (params)
     (cond
-      ((null? params) env)
-      ((eq? (car (car params)) 'static-var) 
-       (create_class_env (cdr params) (interpret_dec (cdr (car params)) env)))
-      ((eq? (car (car params)) 'static-function) 
-       (create_class_env (cdr params) (interpret_function_dec (op1 (car params)) (op2 (car params)) (op3 (car params)) env)))
-      (else (create_class_env (cdr params) env)))))
+      ((null? params) '())
+      ((or (eq? (caar params) 'static-var) (eq? (caar params) 'static-function))
+       (remove_static (cdr params)))
+      (else (cons (car params) (remove_static (cdr params)))))))
 
 ;takes a class definition and pops out the parent classes name
 (define get_cparent
@@ -369,10 +393,6 @@
   (lambda (class)
     (car (cdr (cdr (cdr class))))))
 
-(define interpret_class
- (lambda (name parent params environment)
-   (bind name (create_class_env params (get_penv parent environment)) (add name environment))))
-
 ; if a class has a parent this will return that parents environment
 ; otherwise it will simply return an empty environment
 (define get_penv
@@ -380,7 +400,6 @@
     (cond
       ((null? parent) new_environment)
       (else (add_block (lookup parent env))))))
-
 
 ;takes an expression, evaluates it, and returns the value
 ; no type checking is done
@@ -397,13 +416,28 @@
       
       ((eq? expr 'false) #f)
      
-      ;variable or function. if function then evaluate its value
+      ;variable
       ((and (not (pair? expr)) (not (number? expr))) (lookup expr environment))
       
-      ; we need to perform a function call
+      ; function call
+      
+      ;(funcall (dot class fname) p1 p2 .. pn)
+      ;(funcall (dot object fname) p1 p2 .. pn)
+      ((and (eq? (car expr) 'funcall) (list? (cadr expr)))
+       (cond
+         ; private method
+         ((eq? (lookup (op1 (cadr expr)) class_env) 'nothere)
+          (method_call (op2 (cadr expr)) (cddr expr) (lookup (op2 (cadr expr)) (lookup (op1 (cadr expr)) environment)) class_env))
+         ;static method
+          (else (static_method_call (op1 (cadr expr)) class_env (op2 (cadr expr)) (cddr expr)))))
+      
       ; (funcall name p1 p2...pn)
       ((eq? (car expr) 'funcall) 
        (interpret_function_callv (lookup (car (cdr expr)) environment) (cdr (cdr expr)) environment))
+      
+      ; a.x --> (dot a x)
+      ((eq? (car expr) 'dot)
+       (lookup (op2 expr) (lookup (op1 expr) environment)))
       
       ;ask if need to add error to lambda (v) v here to detect illegal break/continue
       ((eq? '= (car expr))
