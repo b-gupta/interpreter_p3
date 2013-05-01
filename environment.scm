@@ -96,6 +96,10 @@
       ((eq? name (car (car block))) block)
       (else (remove_new_vars name (envremove (car (car block)) block))))))
 
+(define append_block
+  (lambda (a_block b_block)
+    (cons (car a_block) b_block)))
+
 ; creates an empty environment
 (define new_environment '( ( () () ) ) )
 (define new_block '( () () ))

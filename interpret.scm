@@ -36,17 +36,16 @@
 (define interpret_class_list
   (lambda (parsetree main_class env)
     (cond
-      ((null? parsetree) ;(find_class_main (lookup main_class env)))
-      (execute_main (bind 'class env (add 'class (lookup 'static (lookup main_class env))))))
+      ((null? parsetree)
+       (execute_main (append_block (lookup 'static (lookup main_class env))(bind 'class env (add 'class new_environment)))))
       (else (interpret_class_list (cdr parsetree) main_class (interpret_class_def (car parsetree) env))))))
                                             
-(define get_cname
-  (lambda (class_def)
-    (car (cdr class_def))))
 
+; essentially it is required that main does not have any parameters
+; so we execute the body of the main and ignore the parameters
 (define execute_main
   (lambda (env)
-     (interpret_main (car (cdr (lookup 'main env))) (add_block env))))
+     (interpret_main (cadr (lookup 'main env)) (add_block env))))
 
 (define interpret_main
   (lambda (stmt environment)
@@ -380,6 +379,10 @@
       ((or (eq? (caar params) 'static-var) (eq? (caar params) 'static-function))
        (remove_static (cdr params)))
       (else (cons (car params) (remove_static (cdr params)))))))
+
+(define get_cname
+  (lambda (class_def)
+    (car (cdr class_def))))
 
 ;takes a class definition and pops out the parent classes name
 (define get_cparent
