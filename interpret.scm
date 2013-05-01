@@ -37,9 +37,23 @@
   (lambda (parsetree main_class env)
     (cond
       ((null? parsetree)
-       (execute_main (append_block (lookup 'static (lookup main_class env))(bind 'class env (add 'class new_environment)))))
+       ; go through all of the classes and add the global class environment?
+        (execute_main (unbox (lookup 'static (lookup main_class (add_class_ref (getvals env) env))))))
+       ;(execute_main (append_block (unbox (lookup 'static (lookup main_class env))) (bind 'class env (add 'class new_environment)))))
       (else (interpret_class_list (cdr parsetree) main_class (interpret_class_def (car parsetree) env))))))
-                                            
+                 
+; this method will go through the static environments in each class
+; and append a reference to all classes using a variable called class
+; envs -> ( (class A closure) (class B closure) etc )
+; glob_env -> ( ( (A B etc) ( (class A closure) (class B closure) ) etc..
+; this is indeed weird looking but it seems to work
+(define add_class_ref
+  (lambda (envs glob_env)
+    (cond
+      ((null? envs) glob_env)
+      ;(else (add_class_ref (cdr envs) (bind 'class glob_env (add 'class (unbox (lookup 'static (car envs))))))))))
+      (else (set-box! (lookup 'static (car envs)) (bind 'class glob_env (add 'class (unbox (lookup 'static (car envs))))))
+            (add_class_ref (cdr envs) glob_env))))) 
 
 ; essentially it is required that main does not have any parameters
 ; so we execute the body of the main and ignore the parameters
@@ -67,6 +81,7 @@
 ;interpets a given statement
 (define interpret_stmt
   (lambda (stmt environment return break continue)
+    (begin (display environment) (newline) (newline)
     (cond
       ((eq? '= (car stmt))
        (interpret_assign (cdr stmt) environment))
@@ -98,17 +113,22 @@
       ((eq? (car stmt) 'function)
        (interpret_function_dec (op1 stmt) (op2 stmt) (op3 stmt) environment))
       
+      ; (funcall fname p1 p2 .. pn)
+      ; (funcall (dot class/object fname) p1 p2 .. pn)
       ((eq? (car stmt) 'funcall)
        (cond
-         ((list? (car (cdr stmt))) ; eventually consider adding dot to evaluate because it will be associated with vars
-          (interpret_function_call (lookup (op2 (car (cdr stmt))) (remove_block (remove_block environment))) 
-                                                           (cdr (cdr stmt)) 
-                                                           (cons (car environment) (remove_block (remove_block environment)))))
-         (else (interpret_function_call (lookup (car (cdr stmt)) environment) (cdr (cdr stmt)) environment))))
+         ;dot operator
+         ((list? (cadr stmt)) (interpret_dot_call (cadr stmt) (cddr stmt) environment))
+         ;((list? (car (cdr stmt))) ; eventually consider adding dot to evaluate because it will be associated with vars
+         ; (interpret_function_call (lookup (op2 (car (cdr stmt))) (remove_block (remove_block environment))) 
+         ;                                                  (cdr (cdr stmt)) 
+         ;                                                  (cons (car environment) (remove_block (remove_block environment)))))
+         (else (interpret_function_call (lookup (cadr stmt) environment) (cddr stmt) environment))))
       (else environment) ; not sure about here. made sense in my head thats why i put it in
     
-      )))
+      ))))
 
+; before returning converts the value checks if it is a bool and returns true/false instead of #t/#f
 (define check_val
   (lambda (v)
     (cond
@@ -243,6 +263,23 @@
                 (lambda (v) (error "Illegal break"))
                 (lambda (v) (error "Illegal continue")))))))
 
+;
+;(dot class/object fname) (p1 p2 .. pn) (env)
+(define interpret_dot_call
+  (lambda (dot params env)
+    (cond
+      ; object
+      ((eq? (lookup_noerr (op1 dot) (lookup 'class env)) 'nothere)
+      ; get the instance environment and execute the method
+       (lookup (op1 dot) env))
+      (else (static_method_call (op2 dot) params (lookup 'static (lookup (op1 dot) (lookup 'class env)))) env))))
+
+(define static_method_call
+  (lambda (fname params box_env)
+    (begin (display (unbox box_env)) (newline)
+    (set-box! box_env (interpret_function_call (lookup fname (unbox box_env)) params (unbox box_env))))))
+
+; prepares/creates the functions environment before its execution
 (define create_func_env
   (lambda (closure params env)
     (add_params (remove& (car closure)) params (add_block (get_env_closure closure env)) env)))
@@ -340,7 +377,7 @@
 ; 3. instance -> list of all the var and method declarations inside the class (non static)
 (define create_class_closure
   (lambda (parent params new_env)
-   (bind 'static (create_static_env params new_environment) (add 'static 
+   (bind 'static (box (create_static_env params new_environment)) (add 'static 
      (bind 'instance (remove_static params) (add 'instance
        (bind 'parent parent (add 'parent new_env))))))))
 
@@ -429,7 +466,7 @@
       ((and (eq? (car expr) 'funcall) (list? (cadr expr)))
        (cond
          ; private method
-         ((eq? (lookup (op1 (cadr expr)) class_env) 'nothere)
+         ((eq? (lookup_noerr (op1 (cadr expr)) class_env) 'nothere)
           (method_call (op2 (cadr expr)) (cddr expr) (lookup (op2 (cadr expr)) (lookup (op1 (cadr expr)) environment)) class_env))
          ;static method
           (else (static_method_call (op1 (cadr expr)) class_env (op2 (cadr expr)) (cddr expr)))))
@@ -438,9 +475,17 @@
       ((eq? (car expr) 'funcall) 
        (interpret_function_callv (lookup (car (cdr expr)) environment) (cdr (cdr expr)) environment))
       
-      ; a.x --> (dot a x)
+      ; class.field --> (dot class field)
+      ; object.field --> (dot object field)
       ((eq? (car expr) 'dot)
-       (lookup (op2 expr) (lookup (op1 expr) environment)))
+       (cond
+         ;object 
+         ((eq? (lookup_noerr (op1 expr) (lookup 'class environment)) 'nothere)
+          (lookup (op2 expr) (lookup (op1 expr) environment)))
+         ;class (static method call)
+         (else (lookup (op2 expr) (unbox (lookup 'static (lookup (op1 expr) (lookup 'class environment))))))))
+
+
       
       ;ask if need to add error to lambda (v) v here to detect illegal break/continue
       ((eq? '= (car expr))
