@@ -279,6 +279,8 @@
     (begin (display (unbox box_env)) (newline)
     (set-box! box_env (interpret_function_call (lookup fname (unbox box_env)) params (unbox box_env))))))
 
+(define static_method_callv '())
+
 ; prepares/creates the functions environment before its execution
 (define create_func_env
   (lambda (closure params env)
@@ -469,7 +471,8 @@
          ((eq? (lookup_noerr (op1 (cadr expr)) class_env) 'nothere)
           (method_call (op2 (cadr expr)) (cddr expr) (lookup (op2 (cadr expr)) (lookup (op1 (cadr expr)) environment)) class_env))
          ;static method
-          (else (static_method_call (op1 (cadr expr)) class_env (op2 (cadr expr)) (cddr expr)))))
+         ;(fname params box_env)
+          (else (static_method_callv 
       
       ; (funcall name p1 p2...pn)
       ((eq? (car expr) 'funcall) 
@@ -482,10 +485,8 @@
          ;object 
          ((eq? (lookup_noerr (op1 expr) (lookup 'class environment)) 'nothere)
           (lookup (op2 expr) (lookup (op1 expr) environment)))
-         ;class (static method call)
-         (else (lookup (op2 expr) (unbox (lookup 'static (lookup (op1 expr) (lookup 'class environment))))))))
-
-
+         ;class (need to check if parent may have it)
+         (else (find_field (op2 expr) (lookup (op1 expr) (lookup 'class environment)) (lookup 'class environment)))))
       
       ;ask if need to add error to lambda (v) v here to detect illegal break/continue
       ((eq? '= (car expr))
@@ -560,6 +561,18 @@
        (evaluate-env (op1 expr) environment))
       (else (evaluate-env (car expr) environment))
       )))
+
+
+;(else (lookup (op2 expr) (unbox (lookup 'static (lookup (op1 expr) (lookup 'class environment))))))))
+; potentially a field could be in the parent, so this will
+; find it no matter where it is if it exists
+(define find_field
+  (lambda (field c_env env)
+    (cond
+      ((eq? (lookup_noerr field (unbox (lookup 'static c_env))) 'nothere)
+       (find_field field (lookup (lookup 'parent c_env) env) env))
+      (else (lookup field (unbox (lookup 'static c_env)))))))
+(define find_method '())
 
 ; takes a list of expressions and evaluates them returning a list of values.
 (define eval_params
