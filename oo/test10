@@ -14,13 +14,12 @@ class Rectangle {
 }
 
 class Square extends Rectangle {
-
-  static setSize(a) {
-    super.setSize(a, a);
+  static setSize(x) {
+    super.setSize(x, x);
   }
+
   static main() {
     setSize(20);
-    var x = 2;
-    return x * area();
+    return area();
   }
 }

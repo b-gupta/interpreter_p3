@@ -115,10 +115,12 @@
        (interpret_function_dec (op1 stmt) (op2 stmt) (op3 stmt) environment))
       
       ; (funcall fname p1 p2 .. pn)
-      ; (funcall (dot class/object fname) p1 p2 .. pn)
+      ; (funcall (dot class/object/super fname) p1 p2 .. pn)
       ((eq? (car stmt) 'funcall)
        (cond
          ;dot operator
+         ((and (list? (cadr stmt)) (eq? (op1 (cadr stmt)) 'super)) 
+          (interpret_dot_call (replace_super (cadr stmt) environment) (cddr stmt) environment #f))
          ((list? (cadr stmt)) (interpret_dot_call (cadr stmt) (cddr stmt) environment #f))
          ;((list? (car (cdr stmt))) ; eventually consider adding dot to evaluate because it will be associated with vars
          ; (interpret_function_call (lookup (op2 (car (cdr stmt))) (remove_block (remove_block environment))) 
@@ -137,6 +139,12 @@
       ((list? v) v)
       (v 'true)
       (else 'false))))
+
+; used to replace super with the actual class def in the dot expression
+; (dot super fname)
+(define replace_super
+  (lambda (dot environment)
+    (list 'dot (lookup 'parent environment) (op2 dot))))
 
 ;gets the name of a function outof a dot 
 ; (dot var fname)
@@ -270,8 +278,8 @@
 (define static_method_call
   (lambda (fname params box_env env bool_val)
     (cond
-      (bool_val (interpret_function_call (lookup fname (unbox box_env)) params (unbox box_env) bool_val))
-      (else (set-box! box_env (remove_block (interpret_function_call (lookup fname (unbox box_env)) params (append env (unbox box_env)) bool_val))) env))))
+      (bool_val (interpret_function_call (lookup fname (unbox box_env)) params (append_block env (unbox box_env)) bool_val))
+      (else (set-box! box_env (remove_block (interpret_function_call (lookup fname (unbox box_env)) params (append_block env (unbox box_env)) bool_val))) env))))
 
 ; prepares/creates the functions environment before its execution
 (define create_func_env
@@ -464,14 +472,22 @@
       ((eq? expr 'false) #f)
      
       ;variable
-      ((and (not (pair? expr)) (not (number? expr))) (lookup expr environment))
+      ((and (not (pair? expr)) (not (number? expr)))
+       (cond
+         ;(find_field (op2 expr) (lookup (op1 expr) (lookup 'class environment))
+         ;(lookup 'static (lookup (lookup 'parent env) (lookup 'class env))))))
+         ((eq? (lookup_noerr expr environment) 'nothere)
+          (find_field expr (lookup (lookup 'parent environment) (lookup 'class environment)) (lookup 'class environment)))
+         (else (lookup expr environment))))
       
       ; function call
       
+      ;(funcall (dot super fname) p1 p2 .. pn)
       ;(funcall (dot class fname) p1 p2 .. pn)
       ;(funcall (dot object fname) p1 p2 .. pn)
       ((and (eq? (car expr) 'funcall) (list? (cadr expr)))
        (cond
+         ((eq? (op1 (cadr expr)) 'super) (static_method_call (op2 (cadr expr)) (cddr expr) (find_parent env) env #t))
          ; private method
          ((eq? (lookup_noerr (op1 (cadr expr)) (lookup 'class environment)) 'nothere)
           (method_call (op2 (cadr expr)) (cddr expr) (lookup (op2 (cadr expr)) (lookup (op1 (cadr expr)) environment)) class_env))
@@ -480,9 +496,11 @@
           (else (interpret_dot_call (cadr expr) (cddr expr) environment #t))))
       
       ; (funcall name p1 p2...pn)
-      ((eq? (car expr) 'funcall) 
-      (interpret_function_call (lookup (car (cdr expr)) environment) (cdr (cdr expr)) environment #t))
-      ; class.field --> (dot class field)
+      ((eq? (car expr) 'funcall)
+       (find_method (cadr expr) (cddr expr) environment #t))
+      ;(interpret_function_call (lookup (car (cdr expr)) environment) (cdr (cdr expr)) environment #t))
+       
+       ; class.field --> (dot class field)
       ; object.field --> (dot object field)
       ; new object field --> (dot (new Class) field)
       ((eq? (car expr) 'dot)
@@ -600,7 +618,8 @@
 ; note this environment is "boxed"
 (define find_parent
   (lambda (env)
-    (lookup 'static (lookup (lookup 'parent env) (lookup 'class env)))))
+    (begin (display (lookup 'parent env)) (newline) (newline)
+    (lookup 'static (lookup (lookup 'parent env) (lookup 'class env))))))
 
 ; takes a list of expressions and evaluates them returning a list of values.
 (define eval_params
