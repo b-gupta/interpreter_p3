@@ -39,7 +39,7 @@
       ((null? parsetree)
        ; go through all of the classes and add the global class environment?
        ;env)
-        (execute_main (unbox (lookup 'static (lookup main_class (add_class_ref (getvals env) env))))))
+        (execute_main (unbox (lookup 'static (lookup main_class (eval_fields (add_class_ref (getvals env) env) env))))))
        ;(execute_main (append_block (unbox (lookup 'static (lookup main_class env))) (bind 'class env (add 'class new_environment)))))
       (else (interpret_class_list (cdr parsetree) main_class (interpret_class_def (car parsetree) env))))))
                  
@@ -54,7 +54,17 @@
       ((null? envs) glob_env)
       ;(else (add_class_ref (cdr envs) (bind 'class glob_env (add 'class (unbox (lookup 'static (car envs))))))))))
       (else (set-box! (lookup 'static (car envs)) (bind 'class glob_env (add 'class (unbox (lookup 'static (car envs))))))
-            (add_class_ref (cdr envs) glob_env))))) 
+            (add_class_ref (cdr envs) glob_env)))))
+
+;goes through all of the static fields and determines there value
+; initially static veales are forcefully bound to the unevaluated expression
+; to prevent errors when referencing vars inherited
+(define eval_fields
+  (lambda (envs glob_env)
+    (cond
+      ((null? env) glob_env)
+      (else (set-box! (lookup 'static (car envs)) (unbox (lookup 'static (car envs)))
+            (add_class_ref (cdr envs) glob_env))))
 
 ; essentially it is required that main does not have any parameters
 ; so we execute the body of the main and ignore the parameters
@@ -278,8 +288,8 @@
 (define static_method_call
   (lambda (fname params box_env env bool_val)
     (cond
-      (bool_val (interpret_function_call (lookup fname (unbox box_env)) params (append_block env (unbox box_env)) bool_val))
-      (else (set-box! box_env (remove_block (interpret_function_call (lookup fname (unbox box_env)) params (append_block env (unbox box_env)) bool_val))) env))))
+      (bool_val (interpret_function_call (lookup fname (unbox box_env)) (eval_params params env) (unbox box_env) bool_val))
+      (else (set-box! box_env (interpret_function_call (lookup fname (unbox box_env)) (eval_params params env) (unbox box_env) bool_val)) env))))
 
 ; prepares/creates the functions environment before its execution
 (define create_func_env
@@ -477,7 +487,7 @@
          ;(find_field (op2 expr) (lookup (op1 expr) (lookup 'class environment))
          ;(lookup 'static (lookup (lookup 'parent env) (lookup 'class env))))))
          ((eq? (lookup_noerr expr environment) 'nothere)
-          (find_field expr (lookup (lookup 'parent environment) (lookup 'class environment)) (lookup 'class environment)))
+          (find_field expr (find_parent environment) (lookup 'class environment)))
          (else (lookup expr environment))))
       
       ; function call
@@ -505,11 +515,14 @@
       ; new object field --> (dot (new Class) field)
       ((eq? (car expr) 'dot)
        (cond
+         ;super
+         ((eq? (op1 expr) 'super) (find_field (op2 expr) (find_parent environment) (lookup 'class environment)))
          ;object 
          ((eq? (lookup_noerr (op1 expr) (lookup 'class environment)) 'nothere)
           (lookup (op2 expr) (lookup (op1 expr) environment)))
          ;class (need to check if parent may have it)
-         (else (find_field (op2 expr) (lookup (op1 expr) (lookup 'class environment)) (lookup 'class environment)))))
+         (else (find_field (op2 expr) (lookup 'static (lookup (op1 expr) (lookup 'class environment))) (lookup 'class environment)))))
+         ;(else (find_field (op2 expr) (lookup (op1 expr) (lookup 'class environment)) (lookup 'class environment)))))
       
       ; new object
       ((eq? (car expr) 'new)
@@ -610,21 +623,25 @@
 (define find_field
   (lambda (field c_env env)
     (cond
-      ((eq? (lookup_noerr field (unbox (lookup 'static c_env))) 'nothere)
+      ((eq? (lookup_noerr field (unbox c_env)) 'nothere)
        (find_field field (lookup (lookup 'parent c_env) env) env))
-      (else (lookup field (unbox (lookup 'static c_env)))))))
+      (else (lookup field (unbox c_env))))))
+      ;((eq? (lookup_noerr field (unbox (lookup 'static c_env))) 'nothere)
+       ;(find_field field (lookup (lookup 'parent c_env) env) env))
+      ;(else (lookup field (unbox (lookup 'static c_env)))))))
 
 ; given the environment, gets the static environment from the parent class if it exists.
 ; note this environment is "boxed"
 (define find_parent
   (lambda (env)
-    (begin (display (lookup 'parent env)) (newline) (newline)
-    (lookup 'static (lookup (lookup 'parent env) (lookup 'class env))))))
+    (lookup 'static (lookup (lookup 'parent env) (lookup 'class env)))))
 
 ; takes a list of expressions and evaluates them returning a list of values.
 (define eval_params
   (lambda (params environment)
-    (eval_params_h params environment '())))
+    (cond
+      ((null? params) '())
+      (else (cons (evaluate (car params) environment) (eval_params (cdr params) (evaluate-env (car params) environment)))))))
 
 ;returns the first operand of a given stmt
 ; (+ x y) -> x
